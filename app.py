@@ -1,12 +1,14 @@
 import streamlit as st
-import joblib
 import re
 import string
 import nltk
 import requests
 import pandas as pd
+import numpy as np
 from nltk.corpus import stopwords
 from nltk.stem import PorterStemmer
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.naive_bayes import MultinomialNB
 
 nltk.download('stopwords', quiet=True)
 nltk.download('punkt', quiet=True)
@@ -16,12 +18,33 @@ st.set_page_config(page_title="NLP AI Chatbot", layout="wide")
 st.title("NLP & AI Chatbot Application")
 st.markdown("SMS Spam Detection + AI Chatbot powered by Hugging Face Transformers")
 
-# Load models
 @st.cache_resource
 def load_models():
-    model = joblib.load("models/spam_model.pkl")
-    vectorizer = joblib.load("models/vectorizer.pkl")
-    return model, vectorizer
+    df = pd.read_csv("data/spam.csv", encoding='latin-1')
+    df = df[['v1', 'v2']]
+    df.columns = ['label', 'message']
+    
+    stemmer = PorterStemmer()
+    stop_words = set(stopwords.words('english'))
+    
+    def preprocess(text):
+        text = text.lower()
+        text = re.sub(r'[^a-zA-Z\s]', '', text)
+        tokens = text.split()
+        tokens = [stemmer.stem(w) for w in tokens if w not in stop_words]
+        return ' '.join(tokens)
+    
+    df['cleaned'] = df['message'].apply(preprocess)
+    df['label_encoded'] = df['label'].map({'ham': 0, 'spam': 1})
+    
+    tfidf = TfidfVectorizer(max_features=5000)
+    X = tfidf.fit_transform(df['cleaned'])
+    y = df['label_encoded']
+    
+    model = MultinomialNB()
+    model.fit(X, y)
+    
+    return model, tfidf
 
 model, vectorizer = load_models()
 
